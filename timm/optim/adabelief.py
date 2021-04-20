@@ -1,8 +1,8 @@
 import math
 import torch
 from torch.optim.optimizer import Optimizer
-from tabulate import tabulate
-from colorama import Fore, Back, Style
+# from tabulate import tabulate
+# from colorama import Fore, Back, Style
 
 version_higher = ( torch.__version__ >= "1.5.0" )
 
@@ -44,28 +44,28 @@ class AdaBelief(Optimizer):
 
         # ------------------------------------------------------------------------------
         # Print modifications to default arguments
-        if print_change_log:
-            print(Fore.RED + 'Please check your arguments if you have upgraded adabelief-pytorch from version 0.0.5.')
-            print(Fore.RED + 'Modifications to default arguments:')
-            default_table = tabulate([
-                ['adabelief-pytorch=0.0.5','1e-8','False','False'],
-                ['>=0.1.0 (Current 0.2.0)','1e-16','True','True']],
-                headers=['eps','weight_decouple','rectify'])
-            print(Fore.RED + default_table)
+        # if print_change_log:
+        #     print(Fore.RED + 'Please check your arguments if you have upgraded adabelief-pytorch from version 0.0.5.')
+        #     print(Fore.RED + 'Modifications to default arguments:')
+            # default_table = tabulate([
+            #     ['adabelief-pytorch=0.0.5','1e-8','False','False'],
+            #     ['>=0.1.0 (Current 0.2.0)','1e-16','True','True']],
+            #     headers=['eps','weight_decouple','rectify'])
+            # print(Fore.RED + default_table)
 
-            recommend_table = tabulate([
-                ['Recommended eps = 1e-8', 'Recommended eps = 1e-16'],
-                ],
-                headers=['SGD better than Adam (e.g. CNN for Image Classification)','Adam better than SGD (e.g. Transformer, GAN)'])
-            print(Fore.BLUE + recommend_table)
+            # recommend_table = tabulate([
+            #     ['Recommended eps = 1e-8', 'Recommended eps = 1e-16'],
+            #     ],
+            #     headers=['SGD better than Adam (e.g. CNN for Image Classification)','Adam better than SGD (e.g. Transformer, GAN)'])
+            # print(Fore.BLUE + recommend_table)
 
-            print(Fore.BLUE +'For a complete table of recommended hyperparameters, see')
-            print(Fore.BLUE + 'https://github.com/juntang-zhuang/Adabelief-Optimizer')
-
-            print(Fore.GREEN + 'You can disable the log message by setting "print_change_log = False", though it is recommended to keep as a reminder.')
-
-            print(Style.RESET_ALL)
-        # ------------------------------------------------------------------------------
+        #     print(Fore.BLUE +'For a complete table of recommended hyperparameters, see')
+        #     print(Fore.BLUE + 'https://github.com/juntang-zhuang/Adabelief-Optimizer')
+        #
+        #     print(Fore.GREEN + 'You can disable the log message by setting "print_change_log = False", though it is recommended to keep as a reminder.')
+        #
+        #     print(Style.RESET_ALL)
+        # # ------------------------------------------------------------------------------
 
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))

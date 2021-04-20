@@ -6,8 +6,12 @@ import torch.utils.data as data
 import os
 import torch
 import logging
-
 from PIL import Image
+import cv2
+import numpy as np
+import io
+
+import mc
 
 from .parsers import create_parser
 
@@ -26,18 +30,32 @@ class ImageDataset(data.Dataset):
             class_map='',
             load_bytes=False,
             transform=None,
+            json_file=None,
+            use_cache=False,
+            preprocessor='pil'
     ):
         if parser is None or isinstance(parser, str):
-            parser = create_parser(parser or '', root=root, class_map=class_map)
+            parser = create_parser(parser or '', root=root, class_map=class_map,
+                                   json_file=json_file, use_cache=use_cache)
         self.parser = parser
         self.load_bytes = load_bytes
         self.transform = transform
         self._consecutive_errors = 0
+        self.use_cache = use_cache   # whether to use memcache
+        self.initialized = False   # for memcache
+        self.preprocessor = preprocessor
 
     def __getitem__(self, index):
         img, target = self.parser[index]
         try:
-            img = img.read() if self.load_bytes else Image.open(img).convert('RGB')
+            if self.use_cache:
+                self.init_memcached()
+                value = mc.pyvector()
+                self.mclient.Get(img, value)
+                value_str = mc.ConvertBuffer(value)
+                img = self.img_loader(value_str)
+            else:
+                img = img.read() if self.load_bytes else Image.open(img).convert('RGB')
         except Exception as e:
             _logger.warning(f'Skipped sample (index {index}, file {self.parser.filename(index)}). {str(e)}')
             self._consecutive_errors += 1
@@ -60,6 +78,29 @@ class ImageDataset(data.Dataset):
 
     def filenames(self, basename=False, absolute=False):
         return self.parser.filenames(basename, absolute)
+
+    def init_memcached(self):
+        if not self.initialized:
+            server_list_config_file = "/mnt/lustre/share/memcached_client/server_list.conf"
+            client_config_file = "/mnt/lustre/share/memcached_client/client.conf"
+            self.mclient = mc.MemcachedClient.GetInstance(
+                server_list_config_file, client_config_file)
+            self.initialized = True
+
+    def img_loader(self, img_str):
+        if self.preprocessor in ['pil']:
+            buff = io.BytesIO(img_str)
+            with Image.open(buff) as img:
+                img = img.convert('RGB')
+        elif self.preprocessor in ['cv', 'tracking']:
+            raise Exception("Not cv")
+            img_array = np.frombuffer(img_str, np.uint8)
+            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        else:
+            raise ValueError('no such processor')
+        return img
+
+
 
 
 class IterableImageDataset(data.IterableDataset):
