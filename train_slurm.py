@@ -28,6 +28,15 @@ import torch.nn as nn
 import torchvision.utils
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
 from torch.utils.tensorboard import SummaryWriter
+from torch.distributed.fsdp import (
+   FullyShardedDataParallel,
+   CPUOffload,
+)
+from torch.distributed.fsdp.wrap import (
+    transformer_auto_wrap_policy,
+    enable_wrap,
+    wrap,
+)
 
 from timm.data import create_dataset, create_loader, resolve_data_config, Mixup, FastCollateMixup, AugMixDataset
 from timm.models import create_model, safe_model_name, resume_checkpoint, load_checkpoint,\
@@ -76,7 +85,7 @@ parser.add_argument('--train-split', metavar='NAME', default='train',
 parser.add_argument('--val-split', metavar='NAME', default='validation',
                     help='dataset validation split (default: validation)')
 parser.add_argument('--val-meta', type=str,
-                    default='/mnt/cache/huangshaofei/Dataset/ImageNet/to_sf/metas/imagenet_val.json')
+                    default='/mnt/lustre/share/images/meta/imagenet_val.json')
 parser.add_argument('--model', default='resnet101', type=str, metavar='MODEL',
                     help='Name of model to train (default: "countception"')
 parser.add_argument('--pretrained', action='store_true', default=False,
@@ -485,7 +494,9 @@ def main():
         else:
             if args.rank == 0:
                 _logger.info("Using native Torch DistributedDataParallel.")
-            model = NativeDDP(model, device_ids=[args.local_rank])  # can use device str in Torch >= 1.1
+            # model = NativeDDP(model, device_ids=[args.local_rank])  # can use device str in Torch >= 1.1
+            model = FullyShardedDataParallel(model, device_id = args.local_rank)
+            optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=args))
         # NOTE: EMA model does not need to be wrapped by DDP
 
     # setup learning rate schedule and starting epoch
@@ -697,7 +708,7 @@ def train_one_epoch(
             loss = loss_fn(output, target)
             if args.mixup == 0.0:
                 acc1, acc5 = accuracy(output, target, topk=(1, 5))
-
+        mem = torch.cuda.max_memory_allocated(device=args.local_rank)
         if not args.distributed:
             losses_m.update(loss.item(), input.size(0))
 
@@ -751,6 +762,7 @@ def train_one_epoch(
                     'Time: {batch_time.val:.3f}s, {rate:>7.2f}/s  '
                     '({batch_time.avg:.3f}s, {rate_avg:>7.2f}/s)  '
                     'LR: {lr:.3e}  '
+                    'MEM: {mem:.3e}  '
                     'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
                         epoch,
                         batch_idx, len(loader),
@@ -762,6 +774,7 @@ def train_one_epoch(
                         rate=input.size(0) * args.world_size / batch_time_m.val,
                         rate_avg=input.size(0) * args.world_size / batch_time_m.avg,
                         lr=lr,
+                        mem=mem,
                         data_time=data_time_m))
 
                 if args.save_images and output_dir:
