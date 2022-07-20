@@ -124,6 +124,8 @@ parser.add_argument('--max-epoch-eval', type=int, default=10,
                     help='evalute all checkpoint after total epochs - x')
 parser.add_argument('--use-cache', action='store_true', default=False,
                     help='whether to use memcache to load data')
+parser.add_argument('--fsdp', action='store_true', default=False,
+                    help='use fsdp')
 
 # Optimizer parameters
 parser.add_argument('--opt', default='sgd', type=str, metavar='OPTIMIZER',
@@ -486,7 +488,12 @@ def main():
 
     # setup distributed training
     if args.distributed:
-        if has_apex and use_amp != 'native':
+        if args.fsdp:
+            if args.rank == 0:
+                _logger.info("Using Torch FullyShardedDataParalle.")
+            model = FullyShardedDataParallel(model, device_id = args.local_rank)
+            optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=args))
+        elif has_apex and use_amp != 'native':
             # Apex DDP preferred unless native amp is activated
             if args.rank == 0:
                 _logger.info("Using NVIDIA APEX DistributedDataParallel.")
@@ -494,9 +501,7 @@ def main():
         else:
             if args.rank == 0:
                 _logger.info("Using native Torch DistributedDataParallel.")
-            # model = NativeDDP(model, device_ids=[args.local_rank])  # can use device str in Torch >= 1.1
-            model = FullyShardedDataParallel(model, device_id = args.local_rank)
-            optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=args))
+            model = NativeDDP(model, device_ids=[args.local_rank])  # can use device str in Torch >= 1.1
         # NOTE: EMA model does not need to be wrapped by DDP
 
     # setup learning rate schedule and starting epoch
